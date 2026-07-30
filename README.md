@@ -77,6 +77,8 @@ The lab consists of the following components:
 
 ## Lab Walkthrough
 
+*LAB WALKTHROUGH IS BEING REMADE TO ADDRESS SOUND ISSUES*
+
 ## Screenshots
 
 ## Future Improvements
