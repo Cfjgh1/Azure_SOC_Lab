@@ -93,5 +93,3 @@ The lab consists of the following components:
 - Implement Just-In-Time (JIT) VM access and Azure Bastion to improve administrative security.
 - Add scheduled threat hunting queries and hunting playbooks for proactive detection.
 - Integrate Microsoft Entra ID logs to detect suspicious authentication and identity activity.
-
-## License
