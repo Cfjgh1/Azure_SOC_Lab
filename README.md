@@ -10,22 +10,7 @@ The goal of this project is to demonstrate practical experience with cloud SIEM 
 
 ## Architecture
 
-The lab consists of the following components:
-
-- Microsoft Azure
-- Microsoft Sentinel
-- Log Analytics Workspace (SOC-Logs)
-- Windows Server 2022 Domain Controller
-- Windows 10 Enterprise endpoint
-- Kali Linux attacker VM
-- Microsoft Defender for Endpoint
-- Sysmon
-- Azure Virtual Network
-- Network Security Groups (NSGs)
-  
-
 <img width="2839" height="776" alt="architecture" src="https://github.com/user-attachments/assets/69b02ddc-bf14-4748-9611-bd20dc54accb" />
-
 
 ### Data Flow
 
@@ -34,6 +19,7 @@ The lab consists of the following components:
 3. Azure Monitor forwards logs to the Log Analytics Workspace.
 4. Microsoft Sentinel analyzes the logs using custom KQL analytics rules.
 5. Alerts are correlated into incidents for investigation.
+
 
 ## Features
 
