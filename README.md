@@ -38,19 +38,11 @@ The goal of this project is to demonstrate practical experience with cloud SIEM 
 ## Technologies Used
 
 | Category | Technologies |
-|----------|--------------|
-| Cloud | Microsoft Azure |
-| SIEM | Microsoft Sentinel |
-| Log Management | Azure Log Analytics |
-| Infrastructure as Code | Bicep |
-| Query Language | Kusto Query Language (KQL) |
-| Operating Systems | Windows Server 2022, Windows 10 Enterprise LTSC, Kali Linux |
-| Identity | Active Directory Domain Services |
-| Endpoint Monitoring | Sysmon, Windows Event Logs |
-| Security Tools | Microsoft Defender for Endpoint |
-| Networking | Azure Virtual Network, Network Security Groups (NSGs), RDP |
-| Offensive Tools | Hydra, PowerShell, Nmap |
-| Version Control | Git, GitHub |
+| :--- | :--- |
+| **Cloud & SIEM** | Microsoft Azure, Microsoft Sentinel, Log Analytics Workspace |
+| **Host & Endpoint** | Active Directory DS (Windows Server 2022), Windows 10 Enterprise, Sysmon, Defender for Endpoint |
+| **Detection & IaC** | Bicep (Infrastructure as Code), Kusto Query Language (KQL), PowerShell |
+| **Offensive & Network** | Kali Linux (Hydra, Nmap), Azure Virtual Network, Network Security Groups (NSGs) |
 
 ## Detection Rules
 
