@@ -22,6 +22,10 @@ The lab consists of the following components:
 - Sysmon
 - Azure Virtual Network
 - Network Security Groups (NSGs)
+  
+
+<img width="2839" height="776" alt="architecture" src="https://github.com/user-attachments/assets/69b02ddc-bf14-4748-9611-bd20dc54accb" />
+
 
 ### Data Flow
 
