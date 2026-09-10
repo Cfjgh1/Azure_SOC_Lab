@@ -20,6 +20,68 @@ The goal of this project is to demonstrate practical experience with cloud SIEM 
 4. Microsoft Sentinel analyzes the logs using custom KQL analytics rules.
 5. Alerts are correlated into incidents for investigation.
 
+## Automated Infrastructure Deployment
+
+The core environment and analytics rules are provisioned as Infrastructure as Code (IaC) using Azure Bicep to ensure automated, repeatable deployments.
+
+### Infrastructure Definition Example
+
+Custom Microsoft Sentinel scheduled analytics rules are defined declaratively in Bicep:
+
+```bicep
+
+resource bruteForceRule 'Microsoft.OperationalInsights/workspaces/providers/alertRules@2024-01-01-preview' = {
+  name: '${workspace.name}/Microsoft.SecurityInsights/Brute-Force-Detection'
+  kind: 'Scheduled'
+  properties: {
+    displayName: 'Multipe Failed Logon Attempts'
+    description: 'Detects multiple failed logon attempts.'
+    enabled: true
+	suppressionEnabled: false
+	suppressionDuration: 'PT5H'
+    severity: 'Medium'
+    query: loadTextContent('./kql/Multiple_Failed_Logon_Attempts.kql')
+    queryFrequency: 'PT5M'
+    queryPeriod: 'PT5M'
+    triggerOperator: 'GreaterThan'
+    triggerThreshold: 0
+    tactics: [
+      'CredentialAccess'
+    ]
+    techniques: [
+      'T1110'
+    ]
+  }
+}
+```
+Deployment Execution
+To deploy the lab infrastructure and automated Sentinel detection rules via Azure CLI:
+
+# Authenticate to Azure
+az login
+
+# Create the dedicated resource group
+az group create \
+  --name SOC_LAB \
+  --location centralus
+
+# Execute Bicep infrastructure deployment
+az deployment group create \
+  --resource-group SOC_LAB \
+  --template-file bicep/main.bicep \
+  --parameters workspaceName="SOC-Logs"
+
+Figure 1: 
+
+<img width="472" height="201" alt="01-bicep-deploy-terminal png" src="https://github.com/user-attachments/assets/537460c7-569a-4ba6-9541-7865f1465db0" />
+
+Post-Deployment Verification
+Once the deployment job completes, navigate to Microsoft Sentinel > Configuration > Analytics in the Azure portal to verify that all custom KQL analytics rules were created and enabled automatically.
+
+Figure 2: 
+
+<img width="1917" height="867" alt="02-sentinel-active-rules png" src="https://github.com/user-attachments/assets/03504b90-bca9-46f4-a48c-36750ee577c5" />
+
 
 ## Features
 
@@ -57,11 +119,6 @@ The goal of this project is to demonstrate practical experience with cloud SIEM 
 | Defender Configuration Change | 5007 | T1562 | High | Implemented |
 | Port Scan Detection | Network Events | T1046 | Medium | Implemented |
 
-## Lab Walkthrough
-
-*LAB WALKTHROUGH IS BEING REMADE TO ADDRESS SOUND ISSUES*
-
-## Screenshots
 
 ## Future Improvements
 
