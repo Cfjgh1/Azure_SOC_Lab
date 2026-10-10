@@ -2,7 +2,7 @@
 // Severity:   High
 // Frequency:  PT5M   Lookback: PT5M
 // Tactics:    Execution
-// Techniques: -
+// Techniques: T1059
 // Enabled:    True
 
 SecurityEvent

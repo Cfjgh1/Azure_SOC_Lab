@@ -1,8 +1,8 @@
 ﻿// Name:       Outbound Network Scan
 // Severity:   Medium
 // Frequency:  PT5M   Lookback: PT5M
-// Tactics:    Reconnaissance
-// Techniques: -
+// Tactics:    Discovery
+// Techniques: T1046
 // Enabled:    True
 
 Event

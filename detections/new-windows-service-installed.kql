@@ -5,12 +5,15 @@
 // Techniques: T1543
 // Enabled:    True
 
-SecurityEvent
-| where EventID == 7045
-| project
-    TimeGenerated,
-    Computer,
-    Account,
-    ServiceName,
-    ServiceFileName,
-    ServiceType
+let scm = Event
+    | where Source == "Service Control Manager" and EventID == 7045
+    | extend ServiceName     = extract('Name="ServiceName">(.*?)<', 1, EventData)
+    | extend ServiceFileName = extract('Name="ImagePath">(.*?)<', 1, EventData)
+    | extend ServiceAccount  = extract('Name="AccountName">(.*?)<', 1, EventData)
+    | project TimeGenerated, Computer, EventID, Account = UserName, ServiceName, ServiceFileName, ServiceAccount;
+let sec = SecurityEvent
+    | where EventID == 4697
+    | project TimeGenerated, Computer, EventID, Account, ServiceName, ServiceFileName, ServiceAccount;
+union scm, sec
+| summarize arg_min(TimeGenerated, *) by Computer, ServiceName   // 7045 and 4697 fire for the same install
+| project TimeGenerated, Computer, Account, ServiceName, ServiceFileName, ServiceAccount, EventID

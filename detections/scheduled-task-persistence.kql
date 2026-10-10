@@ -1,8 +1,8 @@
 ﻿// Name:       Scheduled Task Persistence
 // Severity:   High
 // Frequency:  PT5M   Lookback: PT5M
-// Tactics:    -
-// Techniques: -
+// Tactics:    Persistence
+// Techniques: T1053
 // Enabled:    True
 
 SecurityEvent

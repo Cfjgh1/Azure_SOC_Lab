@@ -1,7 +1,7 @@
 ﻿// Name:       User Added to Administrators Group
 // Severity:   High
 // Frequency:  PT5M   Lookback: PT5M
-// Tactics:    PrivilegeEscalation
+// Tactics:    PrivilegeEscalation, Persistence
 // Techniques: T1098
 // Enabled:    True
 

@@ -1,8 +1,8 @@
 ﻿// Name:       Defender Firewall Manipulation
 // Severity:   High
 // Frequency:  PT5M   Lookback: PT5M
-// Tactics:    -
-// Techniques: -
+// Tactics:    DefenseEvasion
+// Techniques: T1562
 // Enabled:    True
 
 SecurityEvent

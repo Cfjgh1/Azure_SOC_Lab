@@ -169,7 +169,7 @@ Figure 2:
 | [LSASS Credential Access](detections/lsass-credential-access.kql) | Sysmon 10 | T1003.001 LSASS Memory | High |
 | [Encoded PowerShell Execution](detections/encoded-powershell-execution.kql) | 4688 | T1059.001 PowerShell | High |
 | [User Added to Administrators Group](detections/user-added-to-administrators-group.kql) | 4732 | T1098 Account Manipulation | High |
-| [New Windows Service Installed](detections/new-windows-service-installed.kql) | 7045 | T1543.003 Windows Service | High |
+| [New Windows Service Installed](detections/new-windows-service-installed.kql) | 7045, 4697 | T1543.003 Windows Service | High |
 | [Scheduled Task Persistence](detections/scheduled-task-persistence.kql) | 4698 | T1053.005 Scheduled Task | High |
 | [Defender Firewall Manipulation](detections/defender-firewall-manipulation.kql) | 4950 | T1562.004 Disable or Modify Firewall | High |
 | [Successful RDP Logon Detected](detections/successful-rdp-logon-detected.kql) | 4624 (type 10) | T1021.001 Remote Desktop | Low |
@@ -194,6 +194,14 @@ Issues found while reviewing the environment, and how they were resolved:
 - **The DC's private IP was dynamic.** A deallocate/start cycle could have changed it and broken name resolution
   for the domain. It is now static, and the VNet's DNS setting points at it so every VM, including new ones,
   resolves `soc.lab.com` without per-machine configuration.
+- **Detection logic bugs.** A review of the exported rules found three problems, all fixed:
+  - *New Windows Service Installed* looked for event 7045 in `SecurityEvent`, but 7045 is a System-log event that
+    lands in `Event`, so the rule could never fire. It now queries `Event` for 7045 and `SecurityEvent` for 4697,
+    and removes duplicates when both fire for the same install.
+  - *Potential Password Spraying* and *Kerberoasting* grouped events into 30- and 10-minute windows but only looked
+    back 5 minutes, so most windows were cut short and the thresholds were rarely reachable. Each rule's lookback now
+    equals its run interval (30 and 10 minutes).
+  - Several rules had no MITRE ATT&CK tactic or technique set. All 12 are now mapped.
 - **Leftover resources from earlier builds** (unattached NICs, public IPs, NSGs and SSH keys) were identified and removed.
 - **Disks moved from Premium to Standard SSD.** Disks bill even while VMs are deallocated, and a lab that runs a
   few hours a day doesn't need Premium performance, so this roughly halves storage cost.

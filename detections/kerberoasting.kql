@@ -1,8 +1,8 @@
 ﻿// Name:       Kerberoasting
 // Severity:   Medium
-// Frequency:  PT5M   Lookback: PT5M
-// Tactics:    -
-// Techniques: -
+// Frequency:  PT10M   Lookback: PT10M
+// Tactics:    CredentialAccess
+// Techniques: T1558
 // Enabled:    True
 
 SecurityEvent
@@ -10,9 +10,10 @@ SecurityEvent
 | extend TicketEncryptionType = extract('Name="TicketEncryptionType">(.*?)<', 1, EventData)
 | extend ServiceName = extract('Name="ServiceName">(.*?)<', 1, EventData)
 | extend TargetUserName = extract('Name="TargetUserName">(.*?)<', 1, EventData)
-| where TicketEncryptionType == "0x17"         
+| where TicketEncryptionType == "0x17"           // RC4
 | where ServiceName !endswith "$"                // exclude machine accounts (normal RC4 usage)
 | where TargetUserName != "ANONYMOUS LOGON"
-| summarize RequestCount = count(), DistinctServices = dcount(ServiceName) by TargetUserName, Computer, bin(TimeGenerated, 10m)
-| where RequestCount > 1 or DistinctServices > 1  
-| project TimeGenerated, Computer, TargetUserName, RequestCount, DistinctServices
+| summarize StartTime = min(TimeGenerated), EndTime = max(TimeGenerated),
+            RequestCount = count(), DistinctServices = dcount(ServiceName) by TargetUserName, Computer
+| where RequestCount > 1 or DistinctServices > 1
+| project StartTime, EndTime, Computer, TargetUserName, RequestCount, DistinctServices

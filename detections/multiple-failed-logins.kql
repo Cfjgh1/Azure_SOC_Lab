@@ -2,7 +2,7 @@
 // Severity:   Medium
 // Frequency:  PT5M   Lookback: PT5M
 // Tactics:    CredentialAccess
-// Techniques: -
+// Techniques: T1110
 // Enabled:    True
 
 SecurityEvent
