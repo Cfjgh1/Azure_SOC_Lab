@@ -1,0 +1,16 @@
+﻿// Name:       Successful RDP Logon Detected
+// Severity:   Low
+// Frequency:  PT5M   Lookback: PT5M
+// Tactics:    LateralMovement
+// Techniques: T1021
+// Enabled:    True
+
+SecurityEvent
+| where EventID == 4624
+| where LogonType == 10
+| project
+    TimeGenerated,
+    Computer,
+    Account,
+    IpAddress,
+    LogonType

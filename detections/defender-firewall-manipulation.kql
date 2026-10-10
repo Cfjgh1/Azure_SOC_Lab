@@ -1,0 +1,16 @@
+﻿// Name:       Defender Firewall Manipulation
+// Severity:   High
+// Frequency:  PT5M   Lookback: PT5M
+// Tactics:    -
+// Techniques: -
+// Enabled:    True
+
+SecurityEvent
+| where EventID == 4950
+| extend ProfileChanged = extract('Name="ProfileChanged">(.*?)<', 1, EventData)
+| extend SettingType   = extract('Name="SettingType">(.*?)<', 1, EventData)
+| extend SettingValue  = extract('Name="SettingValue">(.*?)<', 1, EventData)
+| where SettingType has_any ("Enable Windows Firewall", "Firewall", "State")
+| where SettingValue in~ ("No", "Disable", "Disabled", "0", "False", "Off")
+| project TimeGenerated, Computer, Account, ProfileChanged, SettingType, SettingValue, EventData
+| order by TimeGenerated desc

@@ -1,0 +1,14 @@
+﻿// Name:       Scheduled Task Persistence
+// Severity:   High
+// Frequency:  PT5M   Lookback: PT5M
+// Tactics:    -
+// Techniques: -
+// Enabled:    True
+
+SecurityEvent
+| where EventID == 4698
+| extend TaskName    = extract('Name="TaskName">(.*?)<', 1, EventData)
+| extend TaskContent = extract('Name="TaskContent">(.*?)<', 1, EventData)
+| where TaskContent has_any ("powershell", "cmd.exe", "rundll32", "regsvr32", "mshta", "\\Users\\Public", "\\Temp\\")
+| project TimeGenerated, Computer, SubjectUserName, TaskName, TaskContent
+| order by TimeGenerated desc

@@ -1,0 +1,16 @@
+﻿// Name:       User Added to Administrators Group
+// Severity:   High
+// Frequency:  PT5M   Lookback: PT5M
+// Tactics:    PrivilegeEscalation
+// Techniques: T1098
+// Enabled:    True
+
+SecurityEvent
+| where EventID == 4732
+| where TargetUserName contains "Administrators"
+| project
+    TimeGenerated,
+    Computer,
+    Account,
+    MemberName,
+    TargetUserName

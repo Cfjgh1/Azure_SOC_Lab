@@ -1,0 +1,13 @@
+# Compiled Bicep output
+infra/*.json
+
+# Local secrets / overrides
+*.local.bicepparam
+.env
+*.pem
+id_rsa*
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

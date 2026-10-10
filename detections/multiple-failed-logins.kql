@@ -1,0 +1,11 @@
+﻿// Name:       Multiple Failed Logins
+// Severity:   Medium
+// Frequency:  PT5M   Lookback: PT5M
+// Tactics:    CredentialAccess
+// Techniques: -
+// Enabled:    True
+
+SecurityEvent
+| where EventID == 4625
+| summarize FailedAttempts=count() by Account, Computer, bin(TimeGenerated, 5m)
+| where FailedAttempts >= 5

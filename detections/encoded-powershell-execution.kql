@@ -1,0 +1,14 @@
+﻿// Name:       Encoded PowerShell Execution
+// Severity:   High
+// Frequency:  PT5M   Lookback: PT5M
+// Tactics:    Execution
+// Techniques: -
+// Enabled:    True
+
+SecurityEvent
+| where EventID == 4688
+| where NewProcessName has_any ("powershell.exe", "pwsh.exe", "powershell_ise.exe")
+    or CommandLine has_any ("powershell.exe", "pwsh.exe", "powershell_ise.exe")  // catches cmd.exe /c powershell ...
+| where CommandLine matches regex @"(?i)-e(n(c(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?)?\s"
+| project TimeGenerated, Computer, Account, ParentProcessName, NewProcessName, CommandLine
+| order by TimeGenerated desc

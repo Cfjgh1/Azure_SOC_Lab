@@ -1,0 +1,16 @@
+﻿// Name:       New Windows Service Installed
+// Severity:   High
+// Frequency:  PT5M   Lookback: PT5M
+// Tactics:    Persistence
+// Techniques: T1543
+// Enabled:    True
+
+SecurityEvent
+| where EventID == 7045
+| project
+    TimeGenerated,
+    Computer,
+    Account,
+    ServiceName,
+    ServiceFileName,
+    ServiceType

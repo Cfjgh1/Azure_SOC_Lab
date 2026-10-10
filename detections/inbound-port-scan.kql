@@ -1,0 +1,16 @@
+﻿// Name:       Inbound Port Scan
+// Severity:   Medium
+// Frequency:  PT5M   Lookback: PT5M
+// Tactics:    Reconnaissance
+// Techniques: -
+// Enabled:    True
+
+Event
+| where Source == "Microsoft-Windows-Sysmon" and EventID == 3
+| extend Initiated       = extract('Name="Initiated">(.*?)<', 1, EventData)
+| extend SourceIp        = extract('Name="SourceIp">(.*?)<', 1, EventData)
+| extend DestinationPort = extract('Name="DestinationPort">(.*?)<', 1, EventData)
+| where Initiated == "false"
+| summarize ConnectionCount = count(), DistinctPorts = dcount(DestinationPort) by Computer, SourceIp, bin(TimeGenerated, 5m)
+| where ConnectionCount > 100 and DistinctPorts > 20
+| project TimeGenerated, Computer, SourceIp, ConnectionCount, DistinctPorts
