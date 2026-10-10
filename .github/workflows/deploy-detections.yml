@@ -1,0 +1,83 @@
+name: Deploy detections
+
+# Detection-as-code: every change to detections/ is validated on pull requests and
+# deployed to Microsoft Sentinel when it lands on main.
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'detections/**'
+      - 'infra/detections.bicep'
+      - '.github/workflows/deploy-detections.yml'
+  pull_request:
+    paths:
+      - 'detections/**'
+      - 'infra/detections.bicep'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # OIDC token for azure/login, no stored secret
+
+env:
+  RESOURCE_GROUP: SOC_Lab
+  WORKSPACE_NAME: SOC-Logs
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and lint Bicep
+        run: az bicep build --file infra/detections.bicep --stdout > /dev/null
+
+      - name: Check every KQL file is referenced by the template
+        run: |
+          missing=0
+          for f in detections/*.kql; do
+            name=$(basename "$f")
+            if ! grep -q "detections/$name" infra/detections.bicep; then
+              echo "::error file=$f::$name is not referenced in infra/detections.bicep"
+              missing=1
+            fi
+          done
+          exit $missing
+
+  deploy:
+    needs: validate
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: sentinel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Preview changes
+        run: |
+          az deployment group what-if \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/detections.bicep \
+            --parameters workspaceName="$WORKSPACE_NAME"
+
+      - name: Deploy analytics rules
+        run: |
+          az deployment group create \
+            --name "detections-${GITHUB_SHA::7}" \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/detections.bicep \
+            --parameters workspaceName="$WORKSPACE_NAME" \
+            --query "properties.provisioningState" -o tsv
+
+      - name: List deployed rules
+        run: |
+          sub=$(az account show --query id -o tsv)
+          az rest --method get \
+            --url "https://management.azure.com/subscriptions/$sub/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$WORKSPACE_NAME/providers/Microsoft.SecurityInsights/alertRules?api-version=2024-03-01" \
+            --query "value[?kind=='Scheduled'].{rule:properties.displayName, enabled:properties.enabled, lastModified:properties.lastModifiedUtc}" -o table

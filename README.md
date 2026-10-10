@@ -34,9 +34,12 @@ The goal of this project is to demonstrate practical experience with cloud SIEM 
 ## Repository Layout
 
 ```
+.github/workflows/
+  deploy-detections.yml  Validates and deploys detections/ to Sentinel (OIDC, no stored secrets)
 infra/
   main.bicep          Full environment: VNets, peering, Bastion, NSGs, VMs, AMA, DCR, Log Analytics, Sentinel
   detections.bicep    Sentinel analytics rules, queries loaded from detections/
+  playbook.bicep      SOAR playbook: Logic App, connections, least-privilege roles, automation rule
   main.bicepparam     Parameters (secrets are supplied at deploy time, never stored)
 detections/           One .kql file per analytics rule
 scripts/
@@ -45,6 +48,8 @@ scripts/
   Test-LabHealth.ps1  Checks Sysmon is running and each log table is receiving data
   Enable-DCAuditing.ps1  Enables the advanced audit policy the detections rely on
   Export-Detections.ps1  Pulls the live rules from Sentinel back into detections/
+  Setup-Automation.ps1   One-time setup for the pipeline identity and the playbook
+  Clear-AutoBlocks.ps1   Lists / removes IPs the playbook has blocked
 ```
 
 ## Automated Infrastructure Deployment
@@ -125,6 +130,53 @@ Once the deployment job completes, navigate to Microsoft Sentinel > Configuratio
 Figure 2:
 
 <img width="1917" height="867" alt="02-sentinel-active-rules png" src="https://github.com/user-attachments/assets/03504b90-bca9-46f4-a48c-36750ee577c5" />
+
+## Automation
+
+### Detection-as-code pipeline
+
+[`.github/workflows/deploy-detections.yml`](.github/workflows/deploy-detections.yml) treats the `detections/`
+folder as the source of truth for Sentinel:
+
+| Event | What runs |
+|---|---|
+| Pull request touching `detections/` | Bicep build and lint, plus a check that every `.kql` file is wired into `infra/detections.bicep` |
+| Push to `main` | The same checks, then `what-if` and deployment of all analytics rules to Sentinel |
+
+The deploy job authenticates with **OpenID Connect**: GitHub issues a short-lived token that Entra ID trusts
+only for this repository's `sentinel` environment, so no Azure credential is stored in GitHub. The identity
+holds **Microsoft Sentinel Contributor** on the lab resource group and nothing else.
+
+### SOAR playbook
+
+[`infra/playbook.bicep`](infra/playbook.bicep) deploys a Logic App that a Sentinel automation rule runs on
+every new incident:
+
+```mermaid
+flowchart LR
+    I["New Sentinel incident"] --> F["Extract IP entities<br/>(drop internal, loopback, IPv6)"]
+    F --> C{"Brute force, spraying<br/>or port scan?"}
+    C -- yes --> B["Add IPs to AutoBlock-Attackers<br/>deny rule on the Windows NSGs"]
+    C -- no --> N["No containment"]
+    B --> M["Comment on incident"]
+    N --> M
+    M --> E["Email summary"]
+```
+
+- **Least privilege:** the playbook's managed identity has *Microsoft Sentinel Responder* on the resource group
+  (read incidents, add comments) and *Network Contributor* on the two NSGs only.
+- **Guardrails:** addresses in the SOC subnet (`10.0.`), loopback and blank log values are never blocked, so a
+  failed logon between the endpoint and the domain controller can't cut the domain off.
+- **Undo:** `scripts/Clear-AutoBlocks.ps1` lists and removes the block rule.
+
+### One-time setup
+
+```powershell
+./scripts/Setup-Automation.ps1 -Pipeline                                  # OIDC identity + GitHub variables
+./scripts/Setup-Automation.ps1 -Playbook -NotificationEmail you@outlook.com
+```
+
+Then authorize the Outlook.com connection: *SOC_Lab > outlook-soc-response > Edit API connection > Authorize*.
 
 ## Operating the Lab
 
@@ -210,8 +262,6 @@ Issues found while reviewing the environment, and how they were resolved:
 
 - Integrate Microsoft Defender for Endpoint to expand endpoint telemetry and improve detection coverage.
 - Develop additional analytics rules covering persistence, credential access, privilege escalation, and lateral movement techniques.
-- Implement Sentinel automation rules and Logic Apps for automated incident response and notification.
-- Deploy the `detections/` folder to Sentinel automatically from GitHub Actions (detection-as-code CI/CD).
 - Add watchlists and threat intelligence feeds to enrich alerts with external indicators of compromise (IOCs).
 - Create interactive Microsoft Sentinel workbooks for security monitoring and reporting.
 - Deploy Microsoft Defender for Identity to monitor Active Directory authentication and identity-based attacks.
