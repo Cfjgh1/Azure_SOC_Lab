@@ -14,13 +14,13 @@ The goal of this project is to demonstrate practical experience with cloud SIEM 
 
 | Component | Details |
 |---|---|
-| Domain controller | `SOC-WIN-VM1`, Windows Server 2022, `10.0.0.4`, AD DS + DNS for `soc.lab.com` |
+| Domain controller | `SOC-WIN-VM1`, Windows Server 2022, static IP `10.0.0.4`, AD DS + DNS for `soc.lab.com` (set as the VNet's DNS server) |
 | Endpoint | `SOC-WIN10-VM`, Windows 10 Enterprise LTSC, domain-joined, Sysmon |
 | Attacker | `ATK-Kali-VM`, Kali Linux in a separate peered VNet (`Attack-VNET`), SSH key auth only |
 | Telemetry | Azure Monitor Agent → Data Collection Rule → Log Analytics (`SecurityEvent`, `Event`) |
 | SIEM | Microsoft Sentinel with 12 custom scheduled analytics rules and Fusion multistage detection |
 | Access | Azure Bastion only. No NSG allows inbound traffic from the internet |
-| Cost controls | Daily auto-shutdown, free Developer-tier Bastion, start/stop scripts |
+| Cost controls | Daily auto-shutdown, Standard SSD disks, free Developer-tier Bastion, start/stop scripts |
 
 ### Data Flow
 
@@ -191,7 +191,12 @@ Issues found while reviewing the environment, and how they were resolved:
   controller. The rules were removed and administrative access moved to Azure Bastion.
 - **Public IPs are kept for egress only.** The subnets have default outbound access disabled, so the public IPs
   are the VMs' only path to Log Analytics and Windows Update. They remain attached with no inbound rules.
+- **The DC's private IP was dynamic.** A deallocate/start cycle could have changed it and broken name resolution
+  for the domain. It is now static, and the VNet's DNS setting points at it so every VM, including new ones,
+  resolves `soc.lab.com` without per-machine configuration.
 - **Leftover resources from earlier builds** (unattached NICs, public IPs, NSGs and SSH keys) were identified and removed.
+- **Disks moved from Premium to Standard SSD.** Disks bill even while VMs are deallocated, and a lab that runs a
+  few hours a day doesn't need Premium performance, so this roughly halves storage cost.
 
 ## Future Improvements
 
