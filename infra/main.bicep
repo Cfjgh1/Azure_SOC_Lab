@@ -1,6 +1,6 @@
-// SOC lab: AD domain controller + Win10 endpoint (SOC_Vnet), Kali attacker (Attack-VNET),
+﻿// SOC lab: AD domain controller + Win10 endpoint (SOC_Vnet), Kali attacker (Attack-VNET),
 // Log Analytics + Sentinel, AMA with a DCR for Security / Sysmon / System events.
-// Target state: no inbound internet rules (access via Bastion), Standard SSD disks,
+// Target state: no inbound internet rules (access via Bastion), Standard HDD disks,
 // static DC IP, VNet DNS pointed at the DC.
 
 targetScope = 'resourceGroup'
@@ -24,6 +24,9 @@ param vmSize string = 'Standard_D2s_v3'
 param dcPrivateIp string = '10.0.0.4'
 param workspaceName string = 'SOC-Logs'
 param retentionInDays int = 30
+
+@description('Daily ingestion cap (GB) so a noisy VM left running cannot run up the bill.')
+param dailyCapGb int = 1
 
 // ---------------------------------------------------------------- Networking
 
@@ -174,7 +177,7 @@ resource winVm 'Microsoft.Compute/virtualMachines@2024-07-01' = [for (vm, i) in 
       imageReference: vm.image
       osDisk: {
         createOption: 'FromImage'
-        managedDisk: { storageAccountType: 'StandardSSD_LRS' }
+        managedDisk: { storageAccountType: 'Standard_LRS' }
       }
     }
     networkProfile: {
@@ -279,7 +282,7 @@ resource kaliVm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
       }
       osDisk: {
         createOption: 'FromImage'
-        managedDisk: { storageAccountType: 'StandardSSD_LRS' }
+        managedDisk: { storageAccountType: 'Standard_LRS' }
       }
     }
     networkProfile: {
@@ -308,6 +311,7 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   properties: {
     sku: { name: 'PerGB2018' }
     retentionInDays: retentionInDays
+    workspaceCapping: { dailyQuotaGb: dailyCapGb }
   }
 }
 

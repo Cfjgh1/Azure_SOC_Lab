@@ -20,7 +20,7 @@ The goal of this project is to demonstrate practical experience with cloud SIEM 
 | Telemetry | Azure Monitor Agent → Data Collection Rule → Log Analytics (`SecurityEvent`, `Event`) |
 | SIEM | Microsoft Sentinel with 12 custom scheduled analytics rules and Fusion multistage detection |
 | Access | Azure Bastion only. No NSG allows inbound traffic from the internet |
-| Cost controls | Daily auto-shutdown, Standard SSD disks, free Developer-tier Bastion, start/stop scripts |
+| Cost controls | ~$13/month idle: Standard HDD disks, public IPs only while running, free Developer-tier Bastion, daily auto-shutdown, 1 GB/day ingestion cap, $25 budget alert |
 
 ### Data Flow
 
@@ -43,8 +43,8 @@ infra/
   main.bicepparam     Parameters (secrets are supplied at deploy time, never stored)
 detections/           One .kql file per analytics rule
 scripts/
-  Start-Lab.ps1       Starts the DC first, then the endpoint (and optionally Kali)
-  Stop-Lab.ps1        Deallocates every VM
+  Start-Lab.ps1       Recreates the egress public IPs, then starts the DC first
+  Stop-Lab.ps1        Deallocates every VM and removes the egress public IPs
   Test-LabHealth.ps1  Checks Sysmon is running and each log table is receiving data
   Enable-DCAuditing.ps1  Enables the advanced audit policy the detections rely on
   Export-Detections.ps1  Pulls the live rules from Sentinel back into detections/
@@ -181,11 +181,27 @@ Then authorize the Outlook.com connection: *SOC_Lab > outlook-soc-response > Edi
 ## Operating the Lab
 
 ```powershell
-./scripts/Start-Lab.ps1              # DC first, then Win10 (add -IncludeKali for the attacker)
+./scripts/Start-Lab.ps1              # add egress IPs, DC first, then Win10 (add -IncludeKali for the attacker)
 ./scripts/Test-LabHealth.ps1         # Sysmon running? logs arriving in each table?
-./scripts/Stop-Lab.ps1               # deallocate everything
+./scripts/Stop-Lab.ps1               # deallocate everything and remove the egress IPs
 ./scripts/Export-Detections.ps1      # refresh detections/ from the live Sentinel rules
 ```
+
+Daily auto-shutdown deallocates the VMs but can't remove the public IPs, so finish a session with `Stop-Lab.ps1`.
+
+## Cost
+
+Almost all of the bill is for resources that exist while the lab is off, so the lab is tuned for its idle state:
+
+| | Idle cost / month |
+|---|---|
+| Starting point (Premium SSD disks, 5 public IPs) | ~$60 |
+| Standard SSD disks, unused IPs removed | ~$33 |
+| **Now:** Standard HDD disks, public IPs created only while running | **~$13** |
+
+Running the lab adds about $0.53/hour with all three VMs on (D2s_v3). Sentinel, Log Analytics and Bastion
+(Developer SKU) cost close to nothing at this lab's log volume, and Defender for Cloud runs on its free plans only.
+A 1 GB/day ingestion cap and a $25/month budget alert guard against surprises.
 
 ## Features
 
@@ -241,8 +257,10 @@ Issues found while reviewing the environment, and how they were resolved:
   routed through `Microsoft-Event` into the `Event` table.
 - **RDP and SSH were exposed to the internet.** Every NSG allowed 3389/22 from any source, including on the domain
   controller. The rules were removed and administrative access moved to Azure Bastion.
-- **Public IPs are kept for egress only.** The subnets have default outbound access disabled, so the public IPs
-  are the VMs' only path to Log Analytics and Windows Update. They remain attached with no inbound rules.
+- **Public IPs are used for egress only, and only while running.** The subnets have default outbound access
+  disabled, so the public IPs are the VMs' only path to Log Analytics and Windows Update. They have no inbound
+  rules, and the start/stop scripts create and delete them per session because they bill even while VMs are off.
+  (A NAT gateway would avoid per-VM IPs but costs more than all three IPs combined.)
 - **The DC's private IP was dynamic.** A deallocate/start cycle could have changed it and broken name resolution
   for the domain. It is now static, and the VNet's DNS setting points at it so every VM, including new ones,
   resolves `soc.lab.com` without per-machine configuration.
@@ -255,8 +273,11 @@ Issues found while reviewing the environment, and how they were resolved:
     equals its run interval (30 and 10 minutes).
   - Several rules had no MITRE ATT&CK tactic or technique set. All 12 are now mapped.
 - **Leftover resources from earlier builds** (unattached NICs, public IPs, NSGs and SSH keys) were identified and removed.
-- **Disks moved from Premium to Standard SSD.** Disks bill even while VMs are deallocated, and a lab that runs a
-  few hours a day doesn't need Premium performance, so this roughly halves storage cost.
+- **Disks moved from Premium SSD to Standard HDD.** Disks bill even while VMs are deallocated, and a lab that runs
+  a few hours a month doesn't need SSD performance, so storage dropped from ~$42 to ~$13 a month.
+- **VM downsizing was attempted and blocked by capacity.** B-series sizes would cut running cost by about half, but
+  B2s/B2ms had no capacity in the VMs' zones (and need accelerated networking turned off), and the Basv2 family needs
+  a quota increase first. The VMs stay on D2s_v3 for now.
 
 ## Future Improvements
 
