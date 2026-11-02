@@ -20,7 +20,7 @@ The goal of this project is to demonstrate practical experience with cloud SIEM 
 | Telemetry | Azure Monitor Agent → Data Collection Rule → Log Analytics (`SecurityEvent`, `Event`) |
 | SIEM | Microsoft Sentinel with 12 custom scheduled analytics rules and Fusion multistage detection |
 | Access | Azure Bastion only. No NSG allows inbound traffic from the internet |
-| Cost controls | ~$13/month idle: Standard HDD disks, public IPs only while running, free Developer-tier Bastion, daily auto-shutdown, 1 GB/day ingestion cap, $25 budget alert |
+| Cost controls | ~$21/month idle: Standard SSD (Windows) / HDD (Kali) disks, public IPs only while running, free Developer-tier Bastion, daily auto-shutdown, 1 GB/day ingestion cap, $25 budget alert |
 
 ### Data Flow
 
@@ -197,7 +197,8 @@ Almost all of the bill is for resources that exist while the lab is off, so the 
 |---|---|
 | Starting point (Premium SSD disks, 5 public IPs) | ~$60 |
 | Standard SSD disks, unused IPs removed | ~$33 |
-| **Now:** Standard HDD disks, public IPs created only while running | **~$13** |
+| All disks on Standard HDD, public IPs created only while running | ~$13 |
+| **Now:** Windows disks back on Standard SSD (HDD made Windows unusable), Kali on HDD | **~$21** |
 
 Running the lab adds about $0.53/hour with all three VMs on (D2s_v3). Sentinel, Log Analytics and Bastion
 (Developer SKU) cost close to nothing at this lab's log volume, and Defender for Cloud runs on its free plans only.
@@ -273,8 +274,11 @@ Issues found while reviewing the environment, and how they were resolved:
     equals its run interval (30 and 10 minutes).
   - Several rules had no MITRE ATT&CK tactic or technique set. All 12 are now mapped.
 - **Leftover resources from earlier builds** (unattached NICs, public IPs, NSGs and SSH keys) were identified and removed.
-- **Disks moved from Premium SSD to Standard HDD.** Disks bill even while VMs are deallocated, and a lab that runs
-  a few hours a month doesn't need SSD performance, so storage dropped from ~$42 to ~$13 a month.
+- **Disk tier: cheapest isn't always usable.** Disks bill even while VMs are deallocated, so all three moved from
+  Premium SSD to Standard HDD (~$42 → ~$13 a month). On the next start, the domain controller booted but sat for
+  over an hour with the Azure VM agent and Azure Monitor Agent unresponsive and Bastion sessions dropping: weeks of
+  pending Windows updates saturated the HDD. The Windows disks went back to Standard SSD (~$21 a month total) and
+  Kali stayed on HDD. Lesson: size storage for the worst-case boot, not the idle bill.
 - **VM downsizing was attempted and blocked by capacity.** B-series sizes would cut running cost by about half, but
   B2s/B2ms had no capacity in the VMs' zones (and need accelerated networking turned off), and the Basv2 family needs
   a quota increase first. The VMs stay on D2s_v3 for now.

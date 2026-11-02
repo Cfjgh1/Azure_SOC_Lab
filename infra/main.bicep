@@ -1,6 +1,6 @@
 ﻿// SOC lab: AD domain controller + Win10 endpoint (SOC_Vnet), Kali attacker (Attack-VNET),
 // Log Analytics + Sentinel, AMA with a DCR for Security / Sysmon / System events.
-// Target state: no inbound internet rules (access via Bastion), Standard HDD disks,
+// Target state: no inbound internet rules (access via Bastion), Standard SSD for Windows (HDD starves Windows boots), Standard HDD for Kali,
 // static DC IP, VNet DNS pointed at the DC.
 
 targetScope = 'resourceGroup'
@@ -177,7 +177,7 @@ resource winVm 'Microsoft.Compute/virtualMachines@2024-07-01' = [for (vm, i) in 
       imageReference: vm.image
       osDisk: {
         createOption: 'FromImage'
-        managedDisk: { storageAccountType: 'Standard_LRS' }
+        managedDisk: { storageAccountType: 'StandardSSD_LRS' }
       }
     }
     networkProfile: {
