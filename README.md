@@ -249,6 +249,11 @@ A 1 GB/day ingestion cap and a $25/month budget alert guard against surprises.
 Sentinel's built-in **Fusion** rule (Advanced Multistage Attack Detection) is also enabled to correlate alerts
 into multistage incidents.
 
+## Investigations
+
+- [Failed logons from the attack VNet (incident #100)](docs/incident-100-failed-logins.md): an end-to-end test from
+  simulated brute force to automatic NSG block, including the timeline, known gaps and next steps.
+
 ## Hardening and Troubleshooting
 
 Issues found while reviewing the environment, and how they were resolved:
