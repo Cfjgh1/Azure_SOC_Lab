@@ -5,13 +5,17 @@
 // Techniques: T1046
 // Enabled:    True
 
-Event
-| where Source == "Microsoft-Windows-Sysmon" and EventID == 3
-| extend Initiated       = extract('Name="Initiated">(.*?)<', 1, EventData)
-| extend DestinationIp   = extract('Name="DestinationIp">(.*?)<', 1, EventData)
-| extend DestinationPort = extract('Name="DestinationPort">(.*?)<', 1, EventData)
-| extend Image           = extract('Name="Image">(.*?)<', 1, EventData)
-| where Initiated == "true"
-| summarize ConnectionCount = count(), DistinctPorts = dcount(DestinationPort) by Computer, DestinationIp, bin(TimeGenerated, 5m)
+// Uses Windows Firewall's allowed-connection events. Sysmon can't see this activity: 150 attempts against
+// ports that never answered left no Sysmon events in testing.
+SecurityEvent
+| where EventID == 5156
+| extend Direction       = extract('Name="Direction">(.*?)<', 1, EventData)
+| extend DestinationIp   = extract('Name="DestAddress">(.*?)<', 1, EventData)
+| extend DestinationPort = extract('Name="DestPort">(.*?)<', 1, EventData)
+| extend Application     = extract('Name="Application">(.*?)<', 1, EventData)
+| where Direction == "%%14593"                   // outbound
+| where DestinationIp !in ("127.0.0.1", "::1")
+| summarize ConnectionCount = count(), DistinctPorts = dcount(DestinationPort), Applications = make_set(Application, 5)
+    by Computer, DestinationIp, bin(TimeGenerated, 5m)
 | where ConnectionCount > 100 and DistinctPorts > 20
-| project TimeGenerated, Computer, DestinationIp, ConnectionCount, DistinctPorts
+| project TimeGenerated, Computer, DestinationIp, ConnectionCount, DistinctPorts, Applications

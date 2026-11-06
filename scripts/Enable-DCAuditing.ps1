@@ -22,12 +22,11 @@ foreach ($s in $subcategories) {
     auditpol /set /subcategory:"$s" /success:enable /failure:enable | Out-Null
 }
 
-# Blocked traffic only: 5152 / 5157 show scans against closed ports. Logging successes would be far too noisy.
-$blockedTraffic = @('Filtering Platform Packet Drop', 'Filtering Platform Connection')
-foreach ($s in $blockedTraffic) {
-    auditpol /set /subcategory:"$s" /success:disable /failure:enable | Out-Null
-}
-$subcategories += $blockedTraffic
+# 5152 / 5157 show blocked traffic, such as scans against closed ports.
+auditpol /set /subcategory:"Filtering Platform Packet Drop" /success:disable /failure:enable | Out-Null
+# 5156 shows allowed connections, including attempts to hosts that never answer, which Sysmon doesn't log.
+auditpol /set /subcategory:"Filtering Platform Connection" /success:enable /failure:enable | Out-Null
+$subcategories += @('Filtering Platform Packet Drop', 'Filtering Platform Connection')
 
 # Include the command line in 4688 events.
 New-Item -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System\Audit' -Force | Out-Null
