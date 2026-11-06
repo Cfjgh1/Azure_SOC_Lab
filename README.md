@@ -249,24 +249,6 @@ A 1 GB/day ingestion cap and a $25/month budget alert guard against surprises.
 Sentinel's built-in **Fusion** rule (Advanced Multistage Attack Detection) is also enabled to correlate alerts
 into multistage incidents.
 
-## Validation
-
-End-to-end test run on 2026-11-02 (`scripts/Invoke-DetectionTests.ps1` on the Windows 10 endpoint):
-
-| Test action | Raw event(s) ingested | Incident | Time to incident |
-|---|---|---|---|
-| Install and delete a service | 7045 (System), 4697 (Security) | #97 New Windows Service Installed | ~6 min |
-| Register a scheduled task running PowerShell | 4698 | #95 Scheduled Task Persistence | ~6 min |
-| Add a temporary local user to Administrators | 4732 | #94 User Added to Administrators Group | ~6 min |
-| Run `powershell -EncodedCommand` | 4688 with command line | #96 Encoded PowerShell Execution | ~6 min |
-
-The playbook ran on all four incidents, correctly skipped containment (not containment rules, no external IPs),
-and commented on each incident. Health checks confirmed Sysmon running on both Windows hosts and Sysmon events
-arriving in the `Event` table.
-
-Still to validate: IP containment (failed logons from Kali → `AutoBlock-Attackers` NSG rule) and email
-notification (Outlook.com connection not yet authorized).
-
 ## Hardening and Troubleshooting
 
 Issues found while reviewing the environment, and how they were resolved:
