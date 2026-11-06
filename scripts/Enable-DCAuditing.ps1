@@ -14,12 +14,20 @@ $subcategories = @(
     'Directory Service Changes',             # 5136, 5137
     'Security System Extension',             # 4697
     'Other Object Access Events',            # 4698 (scheduled tasks)
+    'MPSSVC Rule-Level Policy Change',       # 4950 (firewall setting changed)
     'Process Creation'                       # 4688
 )
 
 foreach ($s in $subcategories) {
     auditpol /set /subcategory:"$s" /success:enable /failure:enable | Out-Null
 }
+
+# Blocked traffic only: 5152 / 5157 show scans against closed ports. Logging successes would be far too noisy.
+$blockedTraffic = @('Filtering Platform Packet Drop', 'Filtering Platform Connection')
+foreach ($s in $blockedTraffic) {
+    auditpol /set /subcategory:"$s" /success:disable /failure:enable | Out-Null
+}
+$subcategories += $blockedTraffic
 
 # Include the command line in 4688 events.
 New-Item -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System\Audit' -Force | Out-Null
