@@ -50,7 +50,10 @@ scripts/
   Export-Detections.ps1  Pulls the live rules from Sentinel back into detections/
   Setup-Automation.ps1   One-time setup for the pipeline identity and the playbook
   Clear-AutoBlocks.ps1   Lists / removes IPs the playbook has blocked
+  Update-SysmonConfig.ps1  Makes Sysmon log process access to lsass.exe
   Invoke-DetectionTests.ps1  Harmless activity that should trigger four rules, then cleans up
+  Invoke-CoverageTests.ps1   Harmless LSASS, firewall, Kerberos and outbound scan tests
+  Invoke-KaliTests.sh        Password spraying and port scan tests from the Kali VM
 ```
 
 ## Automated Infrastructure Deployment
@@ -231,23 +234,48 @@ A 1 GB/day ingestion cap and a $25/month budget alert guard against surprises.
 
 ## Detection Rules
 
-| Rule | Event ID(s) | MITRE ATT&CK | Severity |
-|------|------------:|--------------|----------|
-| [Multiple Failed Logins](detections/multiple-failed-logins.kql) | 4625 | T1110 Brute Force | Medium |
-| [Potential Password Spraying](detections/potential-password-spraying.kql) | 4625 | T1110.003 Password Spraying | Medium |
-| [Kerberoasting](detections/kerberoasting.kql) | 4769 | T1558.003 Kerberoasting | Medium |
-| [LSASS Credential Access](detections/lsass-credential-access.kql) | Sysmon 10 | T1003.001 LSASS Memory | High |
-| [Encoded PowerShell Execution](detections/encoded-powershell-execution.kql) | 4688 | T1059.001 PowerShell | High |
-| [User Added to Administrators Group](detections/user-added-to-administrators-group.kql) | 4732 | T1098 Account Manipulation | High |
-| [New Windows Service Installed](detections/new-windows-service-installed.kql) | 7045, 4697 | T1543.003 Windows Service | High |
-| [Scheduled Task Persistence](detections/scheduled-task-persistence.kql) | 4698 | T1053.005 Scheduled Task | High |
-| [Defender Firewall Manipulation](detections/defender-firewall-manipulation.kql) | 4950 | T1562.004 Disable or Modify Firewall | High |
-| [Successful RDP Logon Detected](detections/successful-rdp-logon-detected.kql) | 4624 (type 10) | T1021.001 Remote Desktop | Low |
-| [Inbound Port Scan](detections/inbound-port-scan.kql) | Sysmon 3 | T1046 Network Service Discovery | Medium |
-| [Outbound Network Scan](detections/outbound-network-scan.kql) | Sysmon 3 | T1046 Network Service Discovery | Medium |
+| Rule | Event ID(s) | MITRE ATT&CK | Severity | Tested |
+|------|------------:|--------------|----------|--------|
+| [Multiple Failed Logins](detections/multiple-failed-logins.kql) | 4625 | T1110 Brute Force | Medium | Yes |
+| [Potential Password Spraying](detections/potential-password-spraying.kql) | 4625 | T1110.003 Password Spraying | Medium | Yes |
+| [Kerberoasting](detections/kerberoasting.kql) | 4769 | T1558.003 Kerberoasting | Medium | Yes |
+| [LSASS Credential Access](detections/lsass-credential-access.kql) | Sysmon 10 | T1003.001 LSASS Memory | High | Yes |
+| [Encoded PowerShell Execution](detections/encoded-powershell-execution.kql) | 4688 | T1059.001 PowerShell | High | Yes |
+| [User Added to Administrators Group](detections/user-added-to-administrators-group.kql) | 4732 | T1098 Account Manipulation | High | Yes |
+| [New Windows Service Installed](detections/new-windows-service-installed.kql) | 7045, 4697 | T1543.003 Windows Service | High | Yes |
+| [Scheduled Task Persistence](detections/scheduled-task-persistence.kql) | 4698 | T1053.005 Scheduled Task | High | Yes |
+| [Defender Firewall Manipulation](detections/defender-firewall-manipulation.kql) | 4950 | T1562.004 Disable or Modify Firewall | High | Yes |
+| [Successful RDP Logon Detected](detections/successful-rdp-logon-detected.kql) | 4624 (type 10) | T1021.001 Remote Desktop | Low | **Partly** |
+| [Inbound Port Scan](detections/inbound-port-scan.kql) | 5152, 5157 | T1046 Network Service Discovery | Medium | Yes |
+| [Outbound Network Scan](detections/outbound-network-scan.kql) | 5156 | T1046 Network Service Discovery | Medium | Yes |
 
 Sentinel's built-in **Fusion** rule (Advanced Multistage Attack Detection) is also enabled to correlate alerts
 into multistage incidents.
+
+### Detection Coverage
+
+11 of the 12 rules have fired on harmless test activity, using `scripts/Invoke-DetectionTests.ps1`,
+`scripts/Invoke-CoverageTests.ps1` and `scripts/Invoke-KaliTests.sh`. Testing found problems with five rules, and two
+of those had to be rewritten:
+
+| Rule | Test | Incident | Time to incident | What testing found |
+|---|---|---|---|---|
+| Encoded PowerShell Execution | `powershell -EncodedCommand` | #96 | ~6 min | Worked as written |
+| User Added to Administrators Group | Temporary local admin | #94 | ~6 min | Worked as written |
+| New Windows Service Installed | Install and delete a service | #97 | ~6 min | Worked as written |
+| Scheduled Task Persistence | Register and delete a task | #95 | ~6 min | Worked as written |
+| Multiple Failed Logins | 6 failed SMB logons from Kali | #99, #100 | 7-9 min | Worked; see the [investigation](docs/incident-100-failed-logins.md) |
+| Potential Password Spraying | 1 failed logon each for 12 made-up users | #106 | ~29 min | Worked; runs every 30 min |
+| Kerberoasting | Repeated RC4 ticket requests for a temporary service account | #101 | ~15 min | No user account had a service name, so there was nothing to detect |
+| LSASS Credential Access | Open and close a handle to `lsass.exe` | #102 | ~8 min | Sysmon logged no process access; Defender's current path would have caused false positives |
+| Defender Firewall Manipulation | Turn an unused firewall profile off and on | #104 | ~9 min | Auditing was off on the Windows 10 VM |
+| Inbound Port Scan | `nmap` top 1000 ports from Kali | #103 | ~10 min | **Rewritten:** a full scan left only 2 Sysmon events. Kali was blocked automatically and the email step passed |
+| Outbound Network Scan | 150 connection attempts from PowerShell | #107 | ~10 min | **Rewritten:** Sysmon logged none of the attempts |
+| Successful RDP Logon Detected | Bastion logon | None | - | **Not confirmed:** one real logon matched the rule but arrived 73 minutes late and raised no alert, and Bastion sessions failed during retesting |
+
+**Late logs are the main remaining gap.** Rules look back only as far as they run, so late events can be missed.
+Logs from the Windows 10 VM arrived about 15 minutes late after a cold start, so its first LSASS and firewall tests
+raised no alerts. Both rules fired when rerun on the domain controller.
 
 ## Investigations
 
@@ -259,9 +287,9 @@ into multistage incidents.
 Issues found while reviewing the environment, and how they were resolved:
 
 - **Sysmon logs were silently dropped.** The Data Collection Rule sent the Security, Sysmon and System channels
-  to the `Microsoft-SecurityEvent` stream, which only accepts the Security channel, so the Sysmon-based detections
-  (LSASS access, port scans) had no data. Fixed by splitting the rule into two data sources, with Sysmon and System
-  routed through `Microsoft-Event` into the `Event` table.
+  to the `Microsoft-SecurityEvent` stream, which only accepts the Security channel, so Sysmon-based detections had
+  no data. Fixed by splitting the rule into two data sources, with Sysmon and System routed through `Microsoft-Event`
+  into the `Event` table.
 - **RDP and SSH were exposed to the internet.** Every NSG allowed 3389/22 from any source, including on the domain
   controller. The rules were removed and administrative access moved to Azure Bastion.
 - **Public IPs are used for egress only, and only while running.** The subnets have default outbound access

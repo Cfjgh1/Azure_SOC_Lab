@@ -107,8 +107,8 @@ The logon attempts themselves were not repeated after the block.
 | `Send_email` | Failed (real) | The Outlook.com connection had not been authorized yet, so **no email was sent during this run**. |
 
 **Email was fixed afterwards.** The connection was authorized on 2026-11-06, and this run was resubmitted at 21:56 UTC.
-Every step passed and the email arrived. Because that run replayed #100's original trigger, email has not yet been
-tested as part of a live attack.
+Every step passed and the email arrived. That run replayed #100's original trigger, but a later live port scan
+test (incident #103) also blocked Kali and passed the email step in a single run.
 
 ![Resubmitted playbook run with every step passing](images/playbook-run-replay.png)
 
@@ -169,10 +169,9 @@ What the numbers show:
 
 ## Next Steps
 
-1. Rerun the live test from Kali, now that email is authorized, to prove the whole chain in a single run.
-2. Find the cause of the #98 delay by getting automation records into `SentinelHealth` and watching for a repeat.
-3. Make the rule tolerate late logs, for example by using a longer lookback and filtering on `ingestion_time()`.
-4. Add an expiry to automatic blocks.
+1. Find the cause of the #98 delay by getting automation records into `SentinelHealth` and watching for a repeat.
+2. Make the rule tolerate late logs, for example by using a longer lookback and filtering on `ingestion_time()`.
+3. Add an expiry to automatic blocks.
 
 ## Reproducing This
 
