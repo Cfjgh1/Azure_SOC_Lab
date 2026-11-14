@@ -7,12 +7,14 @@
 
 // Late-log safe: looks back 2 hours and alerts once per install, when its first event reaches the workspace.
 let scm = Event
+    | where ingestion_time() <= now()    // rows that arrive after the scheduled time belong to the next run
     | where Source == "Service Control Manager" and EventID == 7045
     | extend ServiceName     = extract('Name="ServiceName">(.*?)<', 1, EventData)
     | extend ServiceFileName = extract('Name="ImagePath">(.*?)<', 1, EventData)
     | extend ServiceAccount  = extract('Name="AccountName">(.*?)<', 1, EventData)
     | project TimeGenerated, Ingested = ingestion_time(), Computer, EventID, Account = UserName, ServiceName, ServiceFileName, ServiceAccount;
 let sec = SecurityEvent
+    | where ingestion_time() <= now()
     | where EventID == 4697
     | project TimeGenerated, Ingested = ingestion_time(), Computer, EventID, Account, ServiceName, ServiceFileName, ServiceAccount;
 union scm, sec

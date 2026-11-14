@@ -14,7 +14,8 @@
 let playbookBlockRule = "/securityrules/autoblock-attackers";
 let pipelineIdentity = "__PIPELINE_OBJECT_ID__";     // filled in at deploy time with the deploying identity
 AzureActivity
-| where ingestion_time() > ago(5m)
+// now() is the run's scheduled time; rows that arrive after it are left for the next run, so nothing alerts twice.
+| where ingestion_time() > ago(5m) and ingestion_time() <= now()
 | where ActivityStatusValue =~ "Success"
 | where OperationNameValue in~ (
     "Microsoft.Network/networkSecurityGroups/write",

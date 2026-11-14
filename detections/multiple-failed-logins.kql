@@ -9,6 +9,7 @@
 // last run, so a burst that arrives late still alerts and an old burst does not alert again.
 // Windows are 10 minutes long and start every 5 minutes, so a burst cannot be split across a bin boundary.
 SecurityEvent
+| where ingestion_time() <= now()    // rows that arrive after the scheduled time belong to the next run
 | where EventID == 4625
 | extend Ingested = ingestion_time()
 | extend WindowStart = range(bin(TimeGenerated, 5m) - 5m, bin(TimeGenerated, 5m), 5m)

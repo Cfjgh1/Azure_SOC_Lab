@@ -10,6 +10,7 @@
 // Late-log safe: counts over a 2-hour lookback, then keeps only groups that received new events since the
 // last run, so a burst that arrives late still alerts and an old burst does not alert again.
 SecurityEvent
+| where ingestion_time() <= now()    // rows that arrive after the scheduled time belong to the next run
 | where EventID == 5156
 | extend Direction       = extract('Name="Direction">(.*?)<', 1, EventData)
 | extend DestinationIp   = extract('Name="DestAddress">(.*?)<', 1, EventData)

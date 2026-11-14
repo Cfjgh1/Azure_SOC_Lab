@@ -8,7 +8,8 @@
 // Late-log safe: looks back 2 hours but only at events that reached the workspace since the last run,
 // so an event that arrives late is still seen once, and one that arrives on time is not alerted twice.
 SecurityEvent
-| where ingestion_time() > ago(5m)
+// now() is the run's scheduled time; rows that arrive after it are left for the next run, so nothing alerts twice.
+| where ingestion_time() > ago(5m) and ingestion_time() <= now()
 | where EventID == 4950
 | extend ProfileChanged = extract('Name="ProfileChanged">(.*?)<', 1, EventData)
 | extend SettingType   = extract('Name="SettingType">(.*?)<', 1, EventData)
