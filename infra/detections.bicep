@@ -16,8 +16,8 @@ func ipEntity(column string) object => { entityType: 'IP', fieldMappings: [ { id
 
 // ruleId is the rule's resource name in Sentinel. These match the rules that already exist in the
 // SOC-Logs workspace so deployments update them in place; any GUID works for a fresh workspace.
-// Rules run every 5 minutes over the last 5 minutes unless frequency is set,
-// in which case the lookback equals the frequency so each run covers its window exactly.
+// Rules run every 5 minutes unless frequency is set. Every rule looks back 2 hours and filters on
+// ingestion_time() inside its query, so events that reach the workspace late are still evaluated once.
 var rules = [
   {
     ruleId: '51f21bf8-f598-415b-aaac-9d6ee4a395b2'
@@ -139,6 +139,20 @@ var rules = [
     techniques: [ 'T1046' ]
     entityMappings: [ hostEntity, ipEntity('DestinationIp') ]
   }
+  {
+    ruleId: '8ea95df8-c12d-4607-8d82-ee593bb95021'
+    displayName: 'Security Control Tampering'
+    severity: 'High'
+    // deployer() is whoever deploys this template: the pipeline's identity in normal use.
+    query: replace(loadTextContent('../detections/security-control-tampering.kql'), '__PIPELINE_OBJECT_ID__', deployer().objectId)
+    tactics: [ 'DefenseEvasion' ]
+    techniques: [ 'T1562' ]
+    entityMappings: [
+      { entityType: 'Account', fieldMappings: [ { identifier: 'FullName', columnName: 'Caller' } ] }
+      ipEntity('CallerIpAddress')
+      { entityType: 'AzureResource', fieldMappings: [ { identifier: 'ResourceId', columnName: 'Resource' } ] }
+    ]
+  }
 ]
 
 resource alertRules 'Microsoft.SecurityInsights/alertRules@2024-03-01' = [for r in rules: {
@@ -151,7 +165,7 @@ resource alertRules 'Microsoft.SecurityInsights/alertRules@2024-03-01' = [for r 
     severity: r.severity
     query: r.query
     queryFrequency: r.?frequency ?? 'PT5M'
-    queryPeriod: r.?frequency ?? 'PT5M'
+    queryPeriod: 'PT2H'
     triggerOperator: 'GreaterThan'
     triggerThreshold: 0
     suppressionEnabled: false

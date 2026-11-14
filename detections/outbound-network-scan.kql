@@ -1,12 +1,14 @@
-﻿// Name:       Outbound Network Scan
+// Name:       Outbound Network Scan
 // Severity:   Medium
-// Frequency:  PT5M   Lookback: PT5M
+// Frequency:  PT5M   Lookback: PT2H
 // Tactics:    Discovery
 // Techniques: T1046
 // Enabled:    True
 
-// Uses Windows Firewall's allowed-connection events. Sysmon can't see this activity: 150 attempts against
+// Uses Windows Firewall's allowed-connection events. Sysmon cannot see this activity: 150 attempts against
 // ports that never answered left no Sysmon events in testing.
+// Late-log safe: counts over a 2-hour lookback, then keeps only groups that received new events since the
+// last run, so a burst that arrives late still alerts and an old burst does not alert again.
 SecurityEvent
 | where EventID == 5156
 | extend Direction       = extract('Name="Direction">(.*?)<', 1, EventData)
@@ -15,7 +17,8 @@ SecurityEvent
 | extend Application     = extract('Name="Application">(.*?)<', 1, EventData)
 | where Direction == "%%14593"                   // outbound
 | where DestinationIp !in ("127.0.0.1", "::1")
-| summarize ConnectionCount = count(), DistinctPorts = dcount(DestinationPort), Applications = make_set(Application, 5)
-    by Computer, DestinationIp, bin(TimeGenerated, 5m)
+| summarize ConnectionCount = count(), DistinctPorts = dcount(DestinationPort), Applications = make_set(Application, 5),
+            LastIngested = max(ingestion_time()) by Computer, DestinationIp, bin(TimeGenerated, 5m)
 | where ConnectionCount > 100 and DistinctPorts > 20
+| where LastIngested > ago(5m)
 | project TimeGenerated, Computer, DestinationIp, ConnectionCount, DistinctPorts, Applications

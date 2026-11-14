@@ -1,0 +1,39 @@
+// Name:       Security Control Tampering
+// Severity:   High
+// Frequency:  PT5M   Lookback: PT2H
+// Tactics:    DefenseEvasion
+// Techniques: T1562
+// Enabled:    True
+
+// Changes in Azure itself to the things this lab relies on to detect and respond: NSG rules, Sentinel analytics
+// and automation rules, the response playbook, log collection and the workspace.
+// Expected automation is excluded: the playbook managing its own block rule, and the pipeline deploying rules.
+// Needs the subscription's activity log in the workspace (infra/activity-log.bicep).
+// Late-log safe: looks back 2 hours but only at events that reached the workspace since the last run,
+// so an event that arrives late is still seen once, and one that arrives on time is not alerted twice.
+let playbookBlockRule = "/securityrules/autoblock-attackers";
+let pipelineIdentity = "__PIPELINE_OBJECT_ID__";     // filled in at deploy time with the deploying identity
+AzureActivity
+| where ingestion_time() > ago(5m)
+| where ActivityStatusValue =~ "Success"
+| where OperationNameValue in~ (
+    "Microsoft.Network/networkSecurityGroups/write",
+    "Microsoft.Network/networkSecurityGroups/delete",
+    "Microsoft.Network/networkSecurityGroups/securityRules/write",
+    "Microsoft.Network/networkSecurityGroups/securityRules/delete",
+    "Microsoft.SecurityInsights/alertRules/write",
+    "Microsoft.SecurityInsights/alertRules/delete",
+    "Microsoft.SecurityInsights/automationRules/write",
+    "Microsoft.SecurityInsights/automationRules/delete",
+    "Microsoft.Logic/workflows/write",
+    "Microsoft.Logic/workflows/delete",
+    "Microsoft.Logic/workflows/disable/action",
+    "Microsoft.Insights/dataCollectionRules/write",
+    "Microsoft.Insights/dataCollectionRules/delete",
+    "Microsoft.Insights/dataCollectionRuleAssociations/delete",
+    "Microsoft.Insights/diagnosticSettings/delete",
+    "Microsoft.OperationalInsights/workspaces/delete")
+| extend IsHuman = Caller contains "@"
+| where not(tolower(_ResourceId) endswith playbookBlockRule and not(IsHuman))                              // playbook blocks and expiries
+| where not(OperationNameValue =~ "Microsoft.SecurityInsights/alertRules/write" and Caller =~ pipelineIdentity)  // pipeline deploys
+| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup, Resource = _ResourceId

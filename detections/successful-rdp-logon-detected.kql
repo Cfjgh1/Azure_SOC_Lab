@@ -1,11 +1,14 @@
-﻿// Name:       Successful RDP Logon Detected
+// Name:       Successful RDP Logon Detected
 // Severity:   Low
-// Frequency:  PT5M   Lookback: PT5M
+// Frequency:  PT5M   Lookback: PT2H
 // Tactics:    LateralMovement
 // Techniques: T1021
 // Enabled:    True
 
+// Late-log safe: looks back 2 hours but only at events that reached the workspace since the last run,
+// so an event that arrives late is still seen once, and one that arrives on time is not alerted twice.
 SecurityEvent
+| where ingestion_time() > ago(5m)
 | where EventID == 4624
 | where LogonType == 10
 | project

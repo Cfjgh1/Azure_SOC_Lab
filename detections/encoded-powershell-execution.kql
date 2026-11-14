@@ -1,11 +1,14 @@
-﻿// Name:       Encoded PowerShell Execution
+// Name:       Encoded PowerShell Execution
 // Severity:   High
-// Frequency:  PT5M   Lookback: PT5M
+// Frequency:  PT5M   Lookback: PT2H
 // Tactics:    Execution
 // Techniques: T1059
 // Enabled:    True
 
+// Late-log safe: looks back 2 hours but only at events that reached the workspace since the last run,
+// so an event that arrives late is still seen once, and one that arrives on time is not alerted twice.
 SecurityEvent
+| where ingestion_time() > ago(5m)
 | where EventID == 4688
 | where NewProcessName has_any ("powershell.exe", "pwsh.exe", "powershell_ise.exe")
     or CommandLine has_any ("powershell.exe", "pwsh.exe", "powershell_ise.exe")  // catches cmd.exe /c powershell ...

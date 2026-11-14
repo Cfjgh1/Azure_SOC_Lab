@@ -1,11 +1,14 @@
-﻿// Name:       Scheduled Task Persistence
+// Name:       Scheduled Task Persistence
 // Severity:   High
-// Frequency:  PT5M   Lookback: PT5M
+// Frequency:  PT5M   Lookback: PT2H
 // Tactics:    Persistence
 // Techniques: T1053
 // Enabled:    True
 
+// Late-log safe: looks back 2 hours but only at events that reached the workspace since the last run,
+// so an event that arrives late is still seen once, and one that arrives on time is not alerted twice.
 SecurityEvent
+| where ingestion_time() > ago(5m)
 | where EventID == 4698
 | extend TaskName    = extract('Name="TaskName">(.*?)<', 1, EventData)
 | extend TaskContent = extract('Name="TaskContent">(.*?)<', 1, EventData)
