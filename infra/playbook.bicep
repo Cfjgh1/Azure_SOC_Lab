@@ -284,15 +284,11 @@ resource expiryWorkflow 'Microsoft.Logic/workflows@2019-05-01' = {
                 authentication: { type: 'ManagedServiceIdentity', audience: armUrl }
               }
             }
-            // The usual case: nothing is blocked, so the GET returns 404 and there is nothing to do.
-            No_block_rule: {
-              type: 'Compose'
-              runAfter: { Get_block_rule: [ 'Failed' ] }
-              inputs: 'No block rule on this NSG.'
-            }
+            // The usual case is that nothing is blocked and the GET returns 404. The check still runs after a failed
+            // GET so the run ends as Succeeded: with no rule there is no expiry to read, so it is never "expired".
             If_expired: {
               type: 'If'
-              runAfter: { Get_block_rule: [ 'Succeeded' ] }
+              runAfter: { Get_block_rule: [ 'Succeeded', 'Failed' ] }
               expression: '@less(ticks(${ruleExpiry}), ticks(utcNow()))'
               actions: {
                 Delete_block_rule: {

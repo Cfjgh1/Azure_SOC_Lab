@@ -1,0 +1,174 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# SOC Lab Overview\nIncidents, how quickly they were raised, which rules have fired, automated containment and log delay. Use the time range below to scope every chart."
+      },
+      "name": "header"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "6c5a1d0e-6a53-4b0f-9a55-0f5f0c3b7a01",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time range",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 2592000000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 1209600000 },
+                { "durationMs": 2592000000 }
+              ]
+            }
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityIncident\n| summarize arg_max(LastModifiedTime, *) by IncidentNumber\n| where CreatedTime {TimeRange}\n| summarize Incidents = count() by Severity\n| order by Incidents desc",
+        "size": 3,
+        "title": "Incidents by severity",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": { "columnMatch": "Severity", "formatter": 1 },
+          "leftContent": { "columnMatch": "Incidents", "formatter": 12, "formatOptions": { "palette": "auto" } },
+          "showBorder": true
+        }
+      },
+      "name": "incidents-by-severity"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityIncident\n| summarize arg_max(LastModifiedTime, *) by IncidentNumber\n| where CreatedTime {TimeRange}\n| summarize Incidents = count() by Title\n| order by Incidents desc",
+        "size": 1,
+        "title": "Incidents by rule",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "incidents-by-rule"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityIncident\n| summarize arg_max(LastModifiedTime, *) by IncidentNumber\n| where CreatedTime {TimeRange}\n| summarize Incidents = count() by bin(CreatedTime, 1d), Severity",
+        "size": 1,
+        "title": "Incidents per day",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "incidents-per-day"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityIncident\n| summarize arg_max(LastModifiedTime, Title), FirstActivityTime = min(FirstActivityTime), CreatedTime = min(CreatedTime) by IncidentNumber\n| where CreatedTime {TimeRange}\n| extend MinutesToIncident = round(datetime_diff('second', CreatedTime, FirstActivityTime) / 60.0, 1)\n| where MinutesToIncident >= 0\n| summarize Incidents = count(), Median = round(percentile(MinutesToIncident, 50), 1), Slowest = max(MinutesToIncident) by Rule = Title\n| order by Median desc",
+        "size": 1,
+        "title": "Minutes from first activity to incident, by rule",
+        "noDataMessage": "No incidents in this time range.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "Median", "formatter": 8, "formatOptions": { "palette": "greenRed" } },
+            { "columnMatch": "Slowest", "formatter": 8, "formatOptions": { "palette": "greenRed" } }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "time-to-incident"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| where TimeGenerated {TimeRange}\n| where ProviderName == 'ASI Scheduled Alerts'\n| summarize Alerts = count(), LastFired = max(TimeGenerated) by Rule = AlertName, Severity = AlertSeverity\n| order by LastFired desc",
+        "size": 1,
+        "title": "Rules that have fired",
+        "noDataMessage": "No rule has fired in this time range.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "customWidth": "50",
+      "name": "rules-fired"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where TimeGenerated {TimeRange}\n| where tolower(_ResourceId) endswith '/securityrules/autoblock-attackers'\n| where ActivityStatusValue =~ 'Success'\n| extend Action = iff(OperationNameValue endswith 'DELETE' or OperationNameValue endswith 'delete', 'Block removed', 'Block written'), By = iff(Caller contains '@', 'A person', 'Automation'), NSG = tostring(split(_ResourceId, '/')[8])\n| project TimeGenerated, Action, By, NSG\n| order by TimeGenerated desc",
+        "size": 1,
+        "title": "Automatic containment: changes to the AutoBlock-Attackers rule",
+        "noDataMessage": "No blocks were written or removed in this time range.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "customWidth": "50",
+      "name": "containment"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "union SecurityEvent, Event\n| where TimeGenerated {TimeRange}\n| extend DelayMinutes = datetime_diff('second', ingestion_time(), TimeGenerated) / 60.0\n| summarize Events = count(), Median = round(percentile(DelayMinutes, 50), 1), P95 = round(percentile(DelayMinutes, 95), 1), Worst = round(max(DelayMinutes), 1) by Computer, Table = Type\n| order by Worst desc",
+        "size": 1,
+        "title": "Log delay in minutes (time from event to arrival in the workspace)",
+        "noDataMessage": "No events in this time range.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "P95", "formatter": 8, "formatOptions": { "palette": "greenRed" } },
+            { "columnMatch": "Worst", "formatter": 8, "formatOptions": { "palette": "greenRed" } }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "log-delay"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityIncident\n| summarize arg_max(LastModifiedTime, *) by IncidentNumber\n| where CreatedTime {TimeRange}\n| project Incident = IncidentNumber, Rule = Title, Severity, Status, Classification, Created = CreatedTime\n| order by Incident desc",
+        "size": 0,
+        "title": "Incidents",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "incident-list"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
