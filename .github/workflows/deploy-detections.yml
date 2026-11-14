@@ -9,10 +9,8 @@ on:
       - 'detections/**'
       - 'infra/detections.bicep'
       - '.github/workflows/deploy-detections.yml'
-  pull_request:
-    paths:
-      - 'detections/**'
-      - 'infra/detections.bicep'
+      - '.github/scripts/**'
+  pull_request:          # every pull request, so "validate" can be a required check on main
   workflow_dispatch:
 
 permissions:
@@ -27,7 +25,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build and lint Bicep
         run: az bicep build --file infra/detections.bicep --stdout > /dev/null
@@ -50,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: sentinel
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -58,6 +56,11 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Runs each query against the real workspace, so a typo in a column or table name fails here, not in Sentinel.
+      # It needs the Azure login, which GitHub only grants to this environment, so it can't run on pull requests.
+      - name: Validate queries against the workspace
+        run: bash .github/scripts/validate-kql.sh "$RESOURCE_GROUP" "$WORKSPACE_NAME"
 
       - name: Preview changes
         run: |

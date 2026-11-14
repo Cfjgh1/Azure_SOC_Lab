@@ -1,10 +1,12 @@
-﻿// Name:       Kerberoasting
+// Name:       Kerberoasting
 // Severity:   Medium
-// Frequency:  PT10M   Lookback: PT10M
+// Frequency:  PT10M   Lookback: PT2H
 // Tactics:    CredentialAccess
 // Techniques: T1558
 // Enabled:    True
 
+// Late-log safe: counts over a 2-hour lookback, then keeps only groups that received new events since the
+// last run, so a burst that arrives late still alerts and an old burst does not alert again.
 SecurityEvent
 | where EventID == 4769
 | extend TicketEncryptionType = extract('Name="TicketEncryptionType">(.*?)<', 1, EventData)
@@ -14,6 +16,8 @@ SecurityEvent
 | where ServiceName !endswith "$"                // exclude machine accounts (normal RC4 usage)
 | where TargetUserName != "ANONYMOUS LOGON"
 | summarize StartTime = min(TimeGenerated), EndTime = max(TimeGenerated),
-            RequestCount = count(), DistinctServices = dcount(ServiceName) by TargetUserName, Computer
+            RequestCount = count(), DistinctServices = dcount(ServiceName),
+            LastIngested = max(ingestion_time()) by TargetUserName, Computer, bin(TimeGenerated, 10m)
 | where RequestCount > 1 or DistinctServices > 1
+| where LastIngested > ago(10m)
 | project StartTime, EndTime, Computer, TargetUserName, RequestCount, DistinctServices

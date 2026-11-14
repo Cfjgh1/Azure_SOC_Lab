@@ -1,9 +1,10 @@
-// SOAR playbook: runs on every new Sentinel incident.
+// SOAR playbook: runs on every new Sentinel incident, and again when a new alert joins a containment incident.
 //  1. Pulls IP entities from the incident, ignoring internal / protected ranges.
 //  2. For brute-force, spraying and port-scan incidents, adds those IPs to a deny rule
-//     (AutoBlock-Attackers) on the Windows VMs' NSGs.
+//     (AutoBlock-Attackers) on the Windows VMs' NSGs. The rule carries an expiry time.
 //  3. Comments on the incident with what it found and did.
 //  4. Emails a summary through Outlook.com.
+// A second Logic App (SOC-Block-Expiry) checks hourly and removes the rule once it has expired.
 //
 // The Outlook.com connection must be authorized once in the portal after deployment
 // (Logic App > API connections > outlook-soc-response > Edit API connection > Authorize).
@@ -21,8 +22,17 @@ param sentinelServicePrincipalId string
 @description('NSGs that receive the AutoBlock-Attackers deny rule.')
 param nsgNames array = [ 'SOC-WIN-VM1-nsg', 'SOC-WIN10-VM-nsg' ]
 
-@description('Incidents with these titles (analytics rule names) trigger IP containment.')
-param containmentRules array = [ 'Multiple Failed Logins', 'Potential Password Spraying', 'Inbound Port Scan' ]
+@description('Analytics rule IDs (from infra/detections.bicep) whose incidents trigger IP containment. IDs, not names, so renaming a rule cannot switch containment off.')
+param containmentRuleIds array = [
+  '51f21bf8-f598-415b-aaac-9d6ee4a395b2' // Multiple Failed Logins
+  'ec8898a4-2208-493d-b7bb-ce8e2b381414' // Potential Password Spraying
+  '7e74201b-a4c9-4993-b794-c2f70b530208' // Inbound Port Scan
+]
+
+@description('Hours a block lasts. Each new block restarts the clock for the whole rule.')
+param blockHours int = 24
+
+param expiryWorkflowName string = 'SOC-Block-Expiry'
 
 @description('IP prefixes that are never blocked: the SOC subnet itself, loopback, and empty values from logs.')
 param protectedPrefixes array = [ '10.0.', '127.', '0.', '-' ]
@@ -35,6 +45,11 @@ var nsgIds = [for n in nsgNames: resourceId('Microsoft.Network/networkSecurityGr
 // Logic Apps expression that keeps an entity only if it's an IPv4 address outside protectedPrefixes.
 var addr = 'string(item()?[\'properties\']?[\'address\'])'
 var prefixChecks = join(map(protectedPrefixes, p => 'not(startsWith(${addr}, \'${p}\'))'), ', ')
+// True when any of the incident's analytics rules is in containmentRuleIds.
+var incidentRuleIds = 'toLower(string(coalesce(triggerBody()?[\'object\']?[\'properties\']?[\'relatedAnalyticRuleIds\'], json(\'[]\'))))'
+var ruleChecks = join(map(containmentRuleIds, id => 'contains(${incidentRuleIds}, \'${toLower(id)}\')'), ', ')
+var isContainmentRule = length(containmentRuleIds) == 1 ? ruleChecks : 'or(${ruleChecks})'
+var expiryMarker = 'Expires: '
 var ipFilter = '@and(equals(item()?[\'kind\'], \'Ip\'), not(empty(${addr})), not(contains(${addr}, \':\')), ${prefixChecks})'
 
 // ---------------------------------------------------------------- Connections
@@ -106,7 +121,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
           runAfter: {}
           inputs: {
             variables: [
-              { name: 'ContainmentNote', type: 'string', value: 'No containment: rule is not in the containment list, or the incident has no external IPv4 addresses.' }
+              { name: 'ContainmentNote', type: 'string', value: 'No containment: rule is not in the containment list, or the incident has no IPv4 addresses outside the protected ranges.' }
             ]
           }
         }
@@ -134,7 +149,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
         Should_contain: {
           type: 'If'
           runAfter: { Unique_IPs: [ 'Succeeded' ] }
-          expression: '@and(contains(json(\'${string(containmentRules)}\'), triggerBody()?[\'object\']?[\'properties\']?[\'title\']), greater(length(outputs(\'Unique_IPs\')), 0))'
+          expression: '@and(${isContainmentRule}, greater(length(outputs(\'Unique_IPs\')), 0))'
           actions: {
             For_each_NSG: {
               type: 'Foreach'
@@ -150,6 +165,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                   }
                 }
                 // Runs whether or not the rule exists yet: a 404 just means start from an empty list.
+                // Re-running for an IP that is already listed changes nothing except the expiry, which restarts.
                 Put_block_rule: {
                   type: 'Http'
                   runAfter: { Get_block_rule: [ 'Succeeded', 'Failed' ] }
@@ -159,7 +175,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                     authentication: { type: 'ManagedServiceIdentity', audience: armUrl }
                     body: {
                       properties: {
-                        description: 'Managed by the ${playbookName} playbook. Clear with scripts/Clear-AutoBlocks.ps1.'
+                        description: 'Managed by ${playbookName}. Clear with scripts/Clear-AutoBlocks.ps1. ${expiryMarker}@{addHours(utcNow(), ${blockHours})}'
                         priority: 100
                         direction: 'Inbound'
                         access: 'Deny'
@@ -179,7 +195,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
               runAfter: { For_each_NSG: [ 'Succeeded' ] }
               inputs: {
                 name: 'ContainmentNote'
-                value: 'Blocked inbound traffic from @{join(outputs(\'Unique_IPs\'), \', \')} on ${join(nsgNames, ', ')} (rule ${blockRuleName}).'
+                value: 'Blocked inbound traffic from @{join(outputs(\'Unique_IPs\'), \', \')} on ${join(nsgNames, ', ')} (rule ${blockRuleName}) until @{addHours(utcNow(), ${blockHours})} UTC.'
               }
             }
           }
@@ -231,6 +247,73 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
   }
 }
 
+// ---------------------------------------------------------------- Block expiry
+
+// Hourly: read the block rule on each NSG and delete it once the time in its description has passed.
+// A rule with no expiry in its description (created by hand or by an older playbook) is left alone.
+var ruleDescription = 'coalesce(body(\'Get_block_rule\')?[\'properties\']?[\'description\'], \'\')'
+var ruleExpiry = 'if(contains(${ruleDescription}, \'${expiryMarker}\'), last(split(${ruleDescription}, \'${expiryMarker}\')), \'9999-12-31T00:00:00Z\')'
+
+resource expiryWorkflow 'Microsoft.Logic/workflows@2019-05-01' = {
+  name: expiryWorkflowName
+  location: location
+  identity: { type: 'SystemAssigned' }
+  properties: {
+    state: 'Enabled'
+    definition: {
+      '$schema': 'https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#'
+      contentVersion: '1.0.0.0'
+      triggers: {
+        Every_hour: {
+          type: 'Recurrence'
+          recurrence: { frequency: 'Hour', interval: 1 }
+        }
+      }
+      actions: {
+        For_each_NSG: {
+          type: 'Foreach'
+          foreach: nsgIds
+          runAfter: {}
+          runtimeConfiguration: { concurrency: { repetitions: 1 } }
+          actions: {
+            Get_block_rule: {
+              type: 'Http'
+              inputs: {
+                method: 'GET'
+                uri: '@{concat(\'${armBase}\',items(\'For_each_NSG\'), \'/securityRules/${blockRuleName}?api-version=2024-05-01\')}'
+                authentication: { type: 'ManagedServiceIdentity', audience: armUrl }
+              }
+            }
+            // The usual case: nothing is blocked, so the GET returns 404 and there is nothing to do.
+            No_block_rule: {
+              type: 'Compose'
+              runAfter: { Get_block_rule: [ 'Failed' ] }
+              inputs: 'No block rule on this NSG.'
+            }
+            If_expired: {
+              type: 'If'
+              runAfter: { Get_block_rule: [ 'Succeeded' ] }
+              expression: '@less(ticks(${ruleExpiry}), ticks(utcNow()))'
+              actions: {
+                Delete_block_rule: {
+                  type: 'Http'
+                  inputs: {
+                    method: 'DELETE'
+                    uri: '@{concat(\'${armBase}\',items(\'For_each_NSG\'), \'/securityRules/${blockRuleName}?api-version=2024-05-01\')}'
+                    authentication: { type: 'ManagedServiceIdentity', audience: armUrl }
+                  }
+                }
+              }
+              else: { actions: {} }
+            }
+          }
+        }
+      }
+      outputs: {}
+    }
+  }
+}
+
 // ---------------------------------------------------------------- Permissions
 
 var roles = {
@@ -264,6 +347,17 @@ resource playbookNsgContributor 'Microsoft.Authorization/roleAssignments@2022-04
   }
 }]
 
+// The expiry workflow can edit the same two NSGs, and nothing else.
+resource expiryNsgContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for (n, i) in nsgNames: {
+  scope: nsgs[i]
+  name: guid(nsgs[i].id, expiryWorkflow.id, roles.networkContributor)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.networkContributor)
+    principalId: expiryWorkflow.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}]
+
 // Sentinel itself needs this to run playbooks in this resource group from automation rules.
 resource sentinelRunsPlaybooks 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(resourceGroup().id, sentinelServicePrincipalId, roles.sentinelAutomationContributor)
@@ -290,6 +384,48 @@ resource runPlaybookOnIncident 'Microsoft.SecurityInsights/automationRules@2024-
       isEnabled: true
       triggersOn: 'Incidents'
       triggersWhen: 'Created'
+    }
+    actions: [
+      {
+        order: 1
+        actionType: 'RunPlaybook'
+        actionConfiguration: {
+          logicAppResourceId: playbook.id
+          tenantId: subscription().tenantId
+        }
+      }
+    ]
+  }
+  dependsOn: [ sentinelRunsPlaybooks ]
+}
+
+// Sentinel adds matching alerts to an open incident for 5 hours instead of creating a new one. Without this rule the
+// playbook would never see them, so an attacker who came back from a new IP, or after a block was removed, would
+// not be blocked again.
+resource runPlaybookOnNewAlert 'Microsoft.SecurityInsights/automationRules@2024-03-01' = {
+  scope: workspace
+  name: guid(workspace.id, playbook.id, 'alert-added')
+  properties: {
+    displayName: 'Run ${playbookName} when an alert joins a containment incident'
+    order: 2
+    triggeringLogic: {
+      isEnabled: true
+      triggersOn: 'Incidents'
+      triggersWhen: 'Updated'
+      conditions: [
+        {
+          conditionType: 'PropertyArrayChanged'
+          conditionProperties: { arrayType: 'Alerts', changeType: 'Added' }
+        }
+        {
+          conditionType: 'Property'
+          conditionProperties: {
+            propertyName: 'IncidentRelatedAnalyticRuleIds'
+            operator: 'Contains'
+            propertyValues: [for id in containmentRuleIds: '${workspace.id}/providers/Microsoft.SecurityInsights/alertRules/${id}']
+          }
+        }
+      ]
     }
     actions: [
       {

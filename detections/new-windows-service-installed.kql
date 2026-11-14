@@ -1,19 +1,21 @@
-﻿// Name:       New Windows Service Installed
+// Name:       New Windows Service Installed
 // Severity:   High
-// Frequency:  PT5M   Lookback: PT5M
+// Frequency:  PT5M   Lookback: PT2H
 // Tactics:    Persistence
 // Techniques: T1543
 // Enabled:    True
 
+// Late-log safe: looks back 2 hours and alerts once per install, when its first event reaches the workspace.
 let scm = Event
     | where Source == "Service Control Manager" and EventID == 7045
     | extend ServiceName     = extract('Name="ServiceName">(.*?)<', 1, EventData)
     | extend ServiceFileName = extract('Name="ImagePath">(.*?)<', 1, EventData)
     | extend ServiceAccount  = extract('Name="AccountName">(.*?)<', 1, EventData)
-    | project TimeGenerated, Computer, EventID, Account = UserName, ServiceName, ServiceFileName, ServiceAccount;
+    | project TimeGenerated, Ingested = ingestion_time(), Computer, EventID, Account = UserName, ServiceName, ServiceFileName, ServiceAccount;
 let sec = SecurityEvent
     | where EventID == 4697
-    | project TimeGenerated, Computer, EventID, Account, ServiceName, ServiceFileName, ServiceAccount;
+    | project TimeGenerated, Ingested = ingestion_time(), Computer, EventID, Account, ServiceName, ServiceFileName, ServiceAccount;
 union scm, sec
-| summarize arg_min(TimeGenerated, *) by Computer, ServiceName   // 7045 and 4697 fire for the same install
+| summarize FirstIngested = min(Ingested), arg_min(TimeGenerated, *) by Computer, ServiceName   // 7045 and 4697 fire for the same install
+| where FirstIngested > ago(5m)
 | project TimeGenerated, Computer, Account, ServiceName, ServiceFileName, ServiceAccount, EventID
