@@ -17,6 +17,6 @@ SecurityEvent
 | summarize FailedAttempts = count(), FirstAttempt = min(TimeGenerated), LastAttempt = max(TimeGenerated),
             LastIngested = max(Ingested) by Account, Computer, IpAddress, WindowStart
 | where FailedAttempts >= 5
-| summarize arg_max(FailedAttempts, *) by Account, Computer, IpAddress      // one row per source: its worst window
-| where LastIngested > ago(5m)
+| where LastIngested > ago(5m)                                              // only windows with new events
+| summarize arg_max(FailedAttempts, *) by Account, Computer, IpAddress      // one row per source: its worst new window
 | project TimeGenerated = FirstAttempt, Account, Computer, IpAddress, FailedAttempts, FirstAttempt, LastAttempt

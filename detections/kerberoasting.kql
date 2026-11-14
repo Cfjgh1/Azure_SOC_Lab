@@ -21,4 +21,4 @@ SecurityEvent
             LastIngested = max(ingestion_time()) by TargetUserName, Computer, bin(TimeGenerated, 10m)
 | where RequestCount > 1 or DistinctServices > 1
 | where LastIngested > ago(10m)
-| project StartTime, EndTime, Computer, TargetUserName, RequestCount, DistinctServices
+| project TimeGenerated = StartTime, StartTime, EndTime, Computer, TargetUserName, RequestCount, DistinctServices

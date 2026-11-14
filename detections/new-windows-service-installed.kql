@@ -18,6 +18,7 @@ let sec = SecurityEvent
     | where EventID == 4697
     | project TimeGenerated, Ingested = ingestion_time(), Computer, EventID, Account, ServiceName, ServiceFileName, ServiceAccount;
 union scm, sec
-| summarize FirstIngested = min(Ingested), arg_min(TimeGenerated, *) by Computer, ServiceName   // 7045 and 4697 fire for the same install
+| summarize FirstIngested = min(Ingested), arg_min(TimeGenerated, *)
+    by Computer, ServiceName, bin(TimeGenerated, 5m)   // 7045 and 4697 fire for the same install, seconds apart
 | where FirstIngested > ago(5m)
-| project TimeGenerated, Computer, Account, ServiceName, ServiceFileName, ServiceAccount, EventID
+| project TimeGenerated = TimeGenerated1, Computer, Account, ServiceName, ServiceFileName, ServiceAccount, EventID
