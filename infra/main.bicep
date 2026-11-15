@@ -1,4 +1,4 @@
-﻿// SOC lab: AD domain controller + Win10 endpoint (SOC_Vnet), Kali attacker (Attack-VNET),
+// SOC lab: AD domain controller + Win10 endpoint (SOC_Vnet), Kali attacker (Attack-VNET),
 // Log Analytics + Sentinel, AMA with a DCR for Security / Sysmon / System events.
 // Target state: no inbound internet rules (access via Bastion), Standard SSD for Windows (HDD starves Windows boots), Standard HDD for Kali,
 // static DC IP, VNet DNS pointed at the DC.
@@ -321,12 +321,27 @@ resource sentinel 'Microsoft.SecurityInsights/onboardingStates@2024-03-01' = {
   properties: {}
 }
 
+// A new workspace has no SecurityEvent table, so the data collection rule's Microsoft-SecurityEvent stream and any
+// analytics rule that queries the table are rejected. This solution creates it.
+resource securitySolution 'Microsoft.OperationsManagement/solutions@2015-11-01-preview' = {
+  name: 'Security(${workspaceName})'
+  location: location
+  plan: {
+    name: 'Security(${workspaceName})'
+    publisher: 'Microsoft'
+    product: 'OMSGallery/Security'
+    promotionCode: ''
+  }
+  properties: { workspaceResourceId: workspace.id }
+}
+
 // Security events -> SecurityEvent table; Sysmon + System -> Event table.
 // (Microsoft-SecurityEvent only accepts the Security channel, so the others need their own stream.)
 resource dcr 'Microsoft.Insights/dataCollectionRules@2022-06-01' = {
   name: 'dcr-soc-windows-security'
   location: location
   kind: 'Windows'
+  dependsOn: [ securitySolution ]
   properties: {
     dataSources: {
       windowsEventLogs: [
@@ -373,7 +388,7 @@ module detections 'detections.bicep' = {
   params: {
     workspaceName: workspace.name
   }
-  dependsOn: [ sentinel ]
+  dependsOn: [ sentinel, securitySolution ]
 }
 
 output dcPrivateIp string = dcPrivateIp
